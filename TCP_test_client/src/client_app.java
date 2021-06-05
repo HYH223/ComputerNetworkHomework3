@@ -42,13 +42,19 @@ class Client extends Thread {
 	Socket socket;
 	String cid = "noname";
 	boolean run = true;
+
 	InputStream is;
 	DataInputStream dis;
-	String msg = "";
-	String request_msg = "";
 	OutputStream os;
 	DataOutputStream dos;
+
+	String msg = "";
+	String request_msg = "";
+
 	Scanner sn = new Scanner(System.in);
+	 // 0 : ack, 1 : response, 2 : total_success
+	 // 3 : accumulate_ack, 4 : accumulate_response, 5: accumulate_success
+	int[] timeout_checker = { 0, 0, 0, 0, 0, 0 };
 
 	Client(Socket _socket) {
 		this.socket = _socket;
@@ -61,12 +67,11 @@ class Client extends Thread {
 			os = socket.getOutputStream();
 			dos = new DataOutputStream(os);
 			Loss loss = new Loss();
-
-			
+			int temp = 0;
 			System.out.println("Command(Hi, CurrentTime, ConnectionTime, ClientList, Quit)※대소문자를 구분합니다.");
-			while (run) {
+			while (temp++<100) {
 				System.out.print("Command:");
-				String command = sn.nextLine();
+				String command = "Hi";
 				if (command.equals("Hi")) {
 					this.cid = client_app.cid;
 					request_msg = Request("Hi");
@@ -103,14 +108,16 @@ class Client extends Thread {
 				TimerTask ACK_task = new TimerTask() {
 					public void run() {
 						loss.Send(socket, request_msg);
+						timeout_checker[0]++;
+						timeout_checker[3]++;
 						System.out.println("ACK타임아웃!");
 					}
 				};
-				
+
 				ACK_timer.schedule(ACK_task, 500, 500);
 				msg = dis.readUTF();
 				String[] ACK = msg.split("///");
-				while(!ACK[0].equals("ACK")){
+				while (!ACK[0].equals("ACK")) {
 					msg = dis.readUTF();
 					ACK = msg.split("///");
 				}
@@ -118,26 +125,36 @@ class Client extends Thread {
 				System.out.println(msg);
 
 				// response
-				
+
 				Timer response_timer = new Timer();
 				TimerTask response_task = new TimerTask() {
 					public void run() {
 						loss.Send(socket, request_msg);
+						timeout_checker[1]++;
+						timeout_checker[4]++;
 						System.out.println("Response타임아웃!");
 					}
 				};
-				
+
 				response_timer.schedule(response_task, 500, 500);
 				msg = dis.readUTF();
 				String[] Response = msg.split("///");
-				while(!Response[0].equals("Type:type2")) {
+				while (!Response[0].equals("Type:type2")) {
 					msg = dis.readUTF();
 					Response = msg.split("///");
 				}
 				response_timer.cancel();
+				timeout_checker[2] = timeout_checker[0] + timeout_checker[1];
+				System.out.println("ACK TimeOut : " + timeout_checker[0] + " ResponseTimeOut : " + timeout_checker[1]
+						+ " Success : " + timeout_checker[2]);
 				System.out.println(msg);
 				System.out.println(Response[2]);
+				for (int i = 0; i < 3; i++)
+					timeout_checker[i] = 0;
 			}
+			timeout_checker[5] = timeout_checker[3] + timeout_checker[4];
+			System.out.println("Total_ACK TimeOut : " + timeout_checker[3] + " Total_ResponseTimeOut : " + timeout_checker[4]
+					+ " Total_Success : " + timeout_checker[5]);
 			System.out.println("이용해주셔서 감사합니다.");
 		} catch (Exception e) {
 			System.out.println("Exception");
